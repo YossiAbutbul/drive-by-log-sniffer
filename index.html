@@ -15,7 +15,6 @@
 <body>
 
 <div id="loading"><div class="bar"></div></div>
-<div id="drop-overlay"><div class="msg">Drop log files to load</div></div>
 <input type="file" id="file-input" hidden multiple accept=".log,.txt">
 
 <!-- Packet inspect modal -->
@@ -26,6 +25,26 @@
       <button class="close-btn" onclick="closeModal()">×</button>
     </h3>
     <div class="kv" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- PER window modal -->
+<div id="per-window-modal">
+  <div class="panel">
+    <h3>
+      <span id="per-window-title">PER window</span>
+      <button class="close-btn" onclick="closePerWindowModal()">×</button>
+    </h3>
+    <div class="per-window-summary" id="per-window-summary"></div>
+    <div class="roster">
+      <table id="per-window-table">
+        <thead><tr>
+          <th>#</th><th>Timestamp</th><th>FCnt</th><th>Δ</th>
+          <th>RSSI</th><th>SNR</th><th>Ch</th><th>MHz</th>
+        </tr></thead>
+        <tbody id="per-window-tbody"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -76,7 +95,7 @@
     <div class="files-modal-actions">
       <button class="btn" onclick="document.getElementById('file-input').click()">+ Add files</button>
       <span style="flex:1"></span>
-      <button class="btn-danger" onclick="purgeAll()">Purge all</button>
+      <button class="btn-danger" onclick="purgeAll()">Remove all files</button>
       <button class="btn-primary" onclick="closeFilesModal()">Done</button>
     </div>
   </div>
@@ -110,14 +129,12 @@
     <div class="sb-section">
       <div class="sb-label">
         <span>Files</span>
-        <span class="count" id="files-count">0</span>
       </div>
 
       <button class="btn-add" onclick="document.getElementById('file-input').click()">
         <span class="plus">+</span>
         <span>Browse log files</span>
       </button>
-      <div class="add-hint">or drag &amp; drop anywhere on the page</div>
 
       <button class="btn btn-block manage-btn" id="manage-files-btn" onclick="openFilesModal()" hidden>
         <span>Manage files</span>
@@ -156,6 +173,8 @@
         <span>Dev Addresses</span>
         <span class="count" id="channels-count">0</span>
       </div>
+      <input class="field-input dev-search" type="search" id="dev-search"
+             placeholder="Search address or name…" oninput="filterDevicePills(this.value)">
       <div class="channels-stack" id="device-pills"></div>
     </div>
 
@@ -211,44 +230,37 @@
           <div class="lbl">Messages</div>
           <div class="num" id="fig-msgs">—</div>
           <div class="sub" id="fig-msgs-sub"></div>
-          <div class="spark" id="fig-msgs-spark"></div>
         </div>
         <div class="fig-card">
           <div class="lbl">Dev Addresses</div>
           <div class="num" id="fig-devs">—</div>
           <div class="sub" id="fig-devs-sub"></div>
-          <div class="spark" id="fig-devs-spark"></div>
         </div>
         <div class="fig-card warn">
           <div class="lbl">Missed</div>
           <div class="num" id="fig-missed">—</div>
           <div class="sub" id="fig-missed-sub"></div>
-          <div class="spark" id="fig-missed-spark"></div>
         </div>
         <div class="fig-card error">
           <div class="lbl">Overall PER</div>
           <div class="num" id="fig-per">—</div>
           <div class="sub" id="fig-per-sub"></div>
-          <div class="spark" id="fig-per-spark"></div>
         </div>
         <div class="fig-card accent">
           <div class="lbl">Avg RSSI</div>
           <div class="num" id="fig-rssi">—</div>
           <div class="sub" id="fig-rssi-sub"></div>
-          <div class="spark" id="fig-rssi-spark"></div>
         </div>
         <div class="fig-card success">
           <div class="lbl">Avg SNR</div>
           <div class="num" id="fig-snr">—</div>
           <div class="sub" id="fig-snr-sub"></div>
-          <div class="spark" id="fig-snr-spark"></div>
         </div>
       </div>
 
       <div class="card reveal">
         <div class="card-head">
           <div class="title">Channel roster</div>
-          <div class="meta">click row to focus charts</div>
         </div>
         <div class="roster">
           <table id="roster-table">
@@ -265,7 +277,7 @@
         <div class="chart-card-head">
           <div class="title">RSSI · Signal strength over time</div>
           <div class="head-tools">
-            <span class="meta">click point to inspect</span>
+            <span class="meta">double-click point to inspect</span>
             <div class="y-range" data-chart="rssi">
               <span class="y-range-lbl">Y</span>
               <input type="number" placeholder="min" id="y-min-rssi" oninput="onYLimitChange('rssi','min',this.value)">
@@ -283,7 +295,7 @@
         <div class="chart-card-head">
           <div class="title">SNR · Signal-to-noise over time</div>
           <div class="head-tools">
-            <span class="meta">click point to inspect</span>
+            <span class="meta">double-click point to inspect</span>
             <div class="y-range" data-chart="snr">
               <span class="y-range-lbl">Y</span>
               <input type="number" placeholder="min" id="y-min-snr" oninput="onYLimitChange('snr','min',this.value)">
@@ -335,7 +347,19 @@
     <div class="tab-panel" data-panel="freq">
       <div class="chart-card">
         <div class="chart-card-head">
-          <div class="title">Frequency Use</div>
+          <div class="title">
+            Frequency Use
+            <span class="info-tip" tabindex="0" aria-label="Channel to frequency map">
+              <span class="info-icon">i</span>
+              <span class="info-pop">
+                <span class="info-pop-title">Channel ↔ Frequency</span>
+                <table class="info-pop-table">
+                  <thead><tr><th>Ch</th><th>MHz</th><th>Pkts</th></tr></thead>
+                  <tbody id="freq-map-tbody"></tbody>
+                </table>
+              </span>
+            </span>
+          </div>
           <div class="head-tools">
             <span class="meta">packets per LoRa channel</span>
             <div class="y-range" data-chart="freq">
@@ -355,7 +379,7 @@
         <div class="chart-card-head">
           <div class="title">Loss Events</div>
           <div class="head-tools">
-            <span class="meta">FCnt gaps · click to inspect</span>
+            <span class="meta">FCnt gaps · double-click to inspect</span>
             <div class="y-range" data-chart="gaps">
               <span class="y-range-lbl">Y</span>
               <input type="number" placeholder="min" id="y-min-gaps" oninput="onYLimitChange('gaps','min',this.value)">

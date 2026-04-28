@@ -21,6 +21,20 @@ function buildDevicePills(devs) {
   devs.forEach((d, i) => c.appendChild(makePill(devLabel(d), d, i, false)));
 
   document.getElementById('channels-count').textContent = devs.length;
+
+  const search = document.getElementById('dev-search');
+  if (search && search.value) filterDevicePills(search.value);
+}
+
+function filterDevicePills(q) {
+  const needle = (q || '').trim().toLowerCase();
+  document.querySelectorAll('#device-pills .dev-pill').forEach(p => {
+    const v = p.dataset.value;
+    if (v === '__all__') { p.style.display = ''; return; }
+    const label = (State.deviceLabels[v] || '').toLowerCase();
+    const match = !needle || v.toLowerCase().includes(needle) || label.includes(needle);
+    p.style.display = match ? '' : 'none';
+  });
 }
 
 function makePill(label, value, colorIdx, isAll) {
@@ -57,8 +71,9 @@ function makePill(label, value, colorIdx, isAll) {
     el.appendChild(ren);
   }
 
-  const active = State.selectedDevices.has(value)
-    || (value === '__all__' && State.selectedDevices.has('__all__'));
+  const allSelected = State.selectedDevices.has('__all__');
+  const active = (value === '__all__' && allSelected)
+    || (value !== '__all__' && (allSelected || State.selectedDevices.has(value)));
   el.classList.toggle('active', active);
 
   el.onclick = () => toggleDevice(value);

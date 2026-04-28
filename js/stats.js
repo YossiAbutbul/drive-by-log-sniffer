@@ -71,7 +71,7 @@ function rollingPER(msgs, windowSize) {
     }
     const exp = fcnts.length + missed;
     const per = exp ? +(missed / exp * 100).toFixed(2) : 0;
-    pts.push({ x: win[win.length - 1].ts * 1000, y: per });
+    pts.push({ x: win[win.length - 1].ts * 1000, y: per, _window: win, _missed: missed });
   }
   return pts;
 }

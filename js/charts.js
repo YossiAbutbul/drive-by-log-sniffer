@@ -14,6 +14,25 @@ function destroyCharts() {
   State.charts = {};
 }
 
+function attachDblClick(chart, kind) {
+  const canvas = chart.canvas;
+  if (!canvas || canvas._dblBound) return;
+  canvas._dblBound = true;
+  canvas.addEventListener('dblclick', ev => {
+    const els = chart.getElementsAtEventForMode(ev, 'nearest', { intersect: true }, true);
+    if (!els.length) return;
+    const e = els[0];
+    const ds = chart.data.datasets[e.datasetIndex];
+    const point = ds.data[e.index];
+    if (!point) return;
+    if (kind === 'per' && point._window) {
+      showPerWindowModal(point, ds.label);
+    } else if (point._record) {
+      showModal(point._record);
+    }
+  });
+}
+
 function cssV(n) { return getComputedStyle(document.body).getPropertyValue(n).trim(); }
 
 function applyChartDefaults() {
@@ -35,7 +54,7 @@ function axisOpts() {
 
 function commonLegend() {
   return {
-    display: true,
+    display: false,
     align: 'end',
     labels: {
       color: cssV('--text-2'),
@@ -116,10 +135,9 @@ function renderRSSI(data) {
     },
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
-      onClick: (ev, els, ch) => onChartClick(ch, els),
       events: ['mousemove', 'mouseout', 'click', 'touchstart'],
-      interaction: { mode: 'index', intersect: false, axis: 'x' },
-      hover: { mode: 'index', intersect: false, axis: 'x' },
+      interaction: { mode: 'nearest', intersect: true, axis: 'xy' },
+      hover: { mode: 'nearest', intersect: true, axis: 'xy' },
       plugins: {
         decimation: decimationPlugin(),
         legend: commonLegend(),
@@ -128,6 +146,7 @@ function renderRSSI(data) {
       scales: timelineScales('RSSI · dBm', 'rssi'),
     }
   });
+  attachDblClick(State.charts.rssi, 'rssi');
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -153,10 +172,9 @@ function renderSNR(data) {
     },
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
-      onClick: (ev, els, ch) => onChartClick(ch, els),
       events: ['mousemove', 'mouseout', 'click', 'touchstart'],
-      interaction: { mode: 'index', intersect: false, axis: 'x' },
-      hover: { mode: 'index', intersect: false, axis: 'x' },
+      interaction: { mode: 'nearest', intersect: true, axis: 'xy' },
+      hover: { mode: 'nearest', intersect: true, axis: 'xy' },
       plugins: {
         decimation: decimationPlugin(),
         legend: commonLegend(),
@@ -165,6 +183,7 @@ function renderSNR(data) {
       scales: timelineScales('SNR · dB', 'snr'),
     }
   });
+  attachDblClick(State.charts.snr, 'snr');
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -182,7 +201,14 @@ function renderPER(data) {
     data: rollingPER(d.messages, win),
     borderColor: devColor(i),
     backgroundColor: devColor(i, 0.08),
-    borderWidth: 1.5, pointRadius: 0, tension: 0.3,
+    borderWidth: 1.5,
+    pointRadius: 0,
+    pointHoverRadius: 5,
+    pointHoverBackgroundColor: devColor(i),
+    pointHoverBorderColor: '#fff',
+    pointHoverBorderWidth: 2,
+    pointHitRadius: 8,
+    tension: 0.3,
     fill: devs.length === 1,
     parsing: false,
     segment: {
@@ -212,12 +238,19 @@ function renderPER(data) {
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
       events: ['mousemove', 'mouseout', 'click', 'touchstart'],
-      interaction: { mode: 'index', intersect: false, axis: 'x' },
-      hover: { mode: 'index', intersect: false, axis: 'x' },
+      interaction: { mode: 'nearest', intersect: true, axis: 'xy' },
+      hover: { mode: 'nearest', intersect: true, axis: 'xy' },
       plugins: {
         decimation: decimationPlugin(),
         legend: commonLegend(),
-        tooltip: { enabled: false },
+        tooltip: commonTooltip({
+          callbacks: {
+            title: items => items[0]
+              ? new Date(items[0].parsed.x).toLocaleString(undefined, { hour12: false })
+              : '',
+            label: ctx => `  ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}%`,
+          }
+        }),
       },
       scales: {
         x: { ...ax, type: 'time',
@@ -231,6 +264,7 @@ function renderPER(data) {
       }
     }
   });
+  attachDblClick(State.charts.per, 'per');
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -293,6 +327,8 @@ function renderHist(data) {
     data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'nearest', intersect: true, axis: 'xy' },
+      hover: { mode: 'nearest', intersect: true, axis: 'xy' },
       plugins: { legend: commonLegend(), tooltip: commonTooltip() },
       scales: {
         x: { ...ax,
@@ -316,6 +352,8 @@ function renderFreq(data) {
   const devs = Object.entries(data);
   const ax = axisOpts();
   const allF = [...new Set(devs.flatMap(([, d]) => d.freqs))].sort((a, b) => a - b);
+
+  renderFreqMap(devs);
   State.charts.freq = new Chart(document.getElementById('freq-chart'), {
     type: 'bar',
     data: {
@@ -330,6 +368,8 @@ function renderFreq(data) {
     },
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'nearest', intersect: true, axis: 'xy' },
+      hover: { mode: 'nearest', intersect: true, axis: 'xy' },
       plugins: { legend: commonLegend(), tooltip: commonTooltip() },
       scales: {
         x: { ...ax, ticks: { ...ax.ticks, maxRotation: 45, minRotation: 45 } },
@@ -363,7 +403,8 @@ function renderGaps(data) {
     },
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
-      onClick: (ev, els, ch) => onChartClick(ch, els),
+      interaction: { mode: 'nearest', intersect: true, axis: 'xy' },
+      hover: { mode: 'nearest', intersect: true, axis: 'xy' },
       plugins: {
         legend: commonLegend(),
         tooltip: commonTooltip({
@@ -387,6 +428,29 @@ function renderGaps(data) {
       }
     }
   });
+  attachDblClick(State.charts.gaps, 'gaps');
+}
+
+function renderFreqMap(devs) {
+  const tbody = document.getElementById('freq-map-tbody');
+  if (!tbody) return;
+  const counts = new Map();
+  for (const [, d] of devs) {
+    for (const m of d.messages) {
+      if (m.chan == null || m.freq == null) continue;
+      const key = `${m.chan}|${m.freq}`;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+  }
+  const rows = [...counts.entries()].map(([k, n]) => {
+    const [chan, freq] = k.split('|');
+    return { chan: +chan, freq: +freq, n };
+  }).sort((a, b) => a.chan - b.chan || a.freq - b.freq);
+
+  tbody.innerHTML = rows.length
+    ? rows.map(r => `<td>${r.chan}</td><td>${r.freq}</td><td>${r.n.toLocaleString()}</td>`)
+          .map(td => `<tr>${td}</tr>`).join('')
+    : `<tr><td colspan="3" style="text-align:center;color:var(--text-3);font-style:italic;padding:18px">no data</td></tr>`;
 }
 
 const CHART_RENDERERS = {
@@ -398,9 +462,3 @@ const CHART_RENDERERS = {
   gaps: renderGaps,
 };
 
-function onChartClick(chart, els) {
-  if (!els.length) return;
-  const e = els[0];
-  const point = chart.data.datasets[e.datasetIndex].data[e.index];
-  if (point && point._record) showModal(point._record);
-}

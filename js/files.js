@@ -6,29 +6,6 @@
      the destructive clear. */
 
 function setupDragDrop() {
-  const overlay = document.getElementById('drop-overlay');
-  let dragCounter = 0;
-
-  document.addEventListener('dragenter', e => {
-    e.preventDefault();
-    if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files')) {
-      dragCounter++;
-      overlay.classList.add('show');
-    }
-  });
-  document.addEventListener('dragleave', e => {
-    e.preventDefault();
-    dragCounter = Math.max(0, dragCounter - 1);
-    if (dragCounter === 0) overlay.classList.remove('show');
-  });
-  document.addEventListener('dragover', e => e.preventDefault());
-  document.addEventListener('drop', e => {
-    e.preventDefault();
-    dragCounter = 0;
-    overlay.classList.remove('show');
-    if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
-  });
-
   document.getElementById('file-input').addEventListener('change', e => {
     if (e.target.files.length) handleFiles(e.target.files);
     e.target.value = '';
@@ -118,7 +95,6 @@ function updateManageButton() {
   const enabled = State.loadedFiles.filter(f => f.enabled !== false).length;
   document.getElementById('manage-count').textContent =
     enabled === total ? total : `${enabled}/${total}`;
-  document.getElementById('files-count').textContent = total;
   btn.hidden = total === 0;
 }
 
@@ -182,7 +158,7 @@ function syncSelectAllCheckbox() {
 
 /* ── Purge (hard reset) ─────────────────────────────────────── */
 function purgeAll() {
-  if (!confirm('Purge all loaded data?')) return;
+  if (!confirm('Remove all loaded files and data?')) return;
   closeFilesModal();
   softReset();
   localStorage.removeItem(STORAGE_KEY);
@@ -199,10 +175,16 @@ function softReset() {
   destroyCharts();
 
   document.getElementById('manage-files-btn').hidden = true;
-  document.getElementById('files-count').textContent = '0';
   document.getElementById('sb-channels').hidden = true;
   document.getElementById('sb-export').hidden = true;
   document.getElementById('compare-toggle').checked = false;
+
+  const pills = document.getElementById('device-pills');
+  if (pills) pills.innerHTML = '';
+  const ch = document.getElementById('channels-count');
+  if (ch) ch.textContent = '0';
+  const search = document.getElementById('dev-search');
+  if (search) search.value = '';
 
   document.getElementById('panel-overview').hidden = true;
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));

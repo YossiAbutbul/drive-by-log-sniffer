@@ -46,7 +46,7 @@ function updateStatusFromData() {
   const totExp = devs.reduce((s, d) => s + d.total + d.missed, 0);
   const per = totExp ? (totMissed / totExp * 100) : 0;
   if (per > State.threshold) setStatus('alarm', `PER ${per.toFixed(1)}% above threshold`);
-  else                       setStatus('live', `PER ${per.toFixed(2)}% · within range`);
+  else                       setStatus('live', 'Live');
 }
 
 /* ── Key figures ───────────────────────────────────────────── */
@@ -80,23 +80,6 @@ function renderKeyFigures(data) {
   document.getElementById('fig-snr').innerHTML = `${avg(allSnr)}<span class="unit">dB</span>`;
   setText('fig-snr-sub', allSnr.length
     ? `min ${Math.min(...allSnr)} · max ${Math.max(...allSnr)}` : '—');
-
-  // Sparklines (combined across selected devices)
-  const allMsgs = devs.flatMap(d => d.messages).sort((a, b) => a.ts - b.ts);
-  const sw = 110, sh = 22;
-
-  document.getElementById('fig-msgs-spark').innerHTML =
-    sparkline(bucketCumulative(allMsgs, 60), { width: sw, height: sh, fill: true, endDot: false });
-  document.getElementById('fig-devs-spark').innerHTML =
-    sparkline(bucketCumulative(allMsgs, 60), { width: sw, height: sh, fill: true, endDot: false });
-  document.getElementById('fig-missed-spark').innerHTML =
-    sparkline(bucketPER(allMsgs, 60), { width: sw, height: sh, fill: true });
-  document.getElementById('fig-per-spark').innerHTML =
-    sparkline(bucketPER(allMsgs, 60), { width: sw, height: sh, fill: true });
-  document.getElementById('fig-rssi-spark').innerHTML =
-    sparkline(bucketSeries(allMsgs, m => m.rssi, 60), { width: sw, height: sh });
-  document.getElementById('fig-snr-spark').innerHTML =
-    sparkline(bucketSeries(allMsgs, m => m.snr, 60), { width: sw, height: sh });
 }
 
 function setText(id, v) {

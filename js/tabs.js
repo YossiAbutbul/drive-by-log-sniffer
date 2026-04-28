@@ -8,9 +8,12 @@ function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => {
     t.classList.toggle('active', t.dataset.tab === name);
   });
+
+  const hasData = Object.keys(State.stats).length > 0;
   document.querySelectorAll('.tab-panel').forEach(p => {
-    p.classList.toggle('active', p.dataset.panel === name);
+    p.classList.toggle('active', hasData && p.dataset.panel === name);
   });
+  document.getElementById('empty-main').style.display = hasData ? 'none' : 'flex';
 
   renderActiveChart();
   saveState();

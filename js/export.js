@@ -2,10 +2,10 @@
 
 function exportSummaryCSV() {
   const data = getFiltered();
-  const cols = COLUMNS.map(c => c.label);
-  const rows = [cols.join(',')];
+  const cols = COLUMNS.filter(c => c.type !== 'spark');
+  const rows = [cols.map(c => c.label).join(',')];
   Object.values(data).forEach(d => {
-    rows.push(COLUMNS.map(col => csvCell(
+    rows.push(cols.map(col => csvCell(
       Array.isArray(d[col.key]) ? d[col.key].map(c => 'CH' + c).join(' ') : d[col.key]
     )).join(','));
   });

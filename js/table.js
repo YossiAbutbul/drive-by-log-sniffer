@@ -61,7 +61,6 @@ function renderTable(data) {
       </span>`;
 
     const tr = document.createElement('tr');
-    if (State.selectedDevices.has(d.devaddr)) tr.classList.add('selected');
     tr.innerHTML = `
       <td>${idCell}</td>
       <td class="r-num">${d.total.toLocaleString()}</td>
@@ -76,7 +75,6 @@ function renderTable(data) {
       <td class="r-num">${fmtN(d.avg_snr, '')}</td>
       <td class="r-dim">${d.channels.map(c => c).join(' · ')}</td>
     `;
-    tr.onclick = () => clickTableRow(d.devaddr);
     tbody.appendChild(tr);
   });
 }
@@ -89,17 +87,3 @@ function shortTs(iso) {
   } catch { return iso; }
 }
 
-function clickTableRow(addr) {
-  if (State.selectedDevices.size === 1 && State.selectedDevices.has(addr)) {
-    State.selectedDevices = new Set(['__all__']);
-  } else {
-    State.selectedDevices = new Set([addr]);
-  }
-  document.querySelectorAll('.dev-pill').forEach(p => {
-    const v = p.dataset.value;
-    const active = (v === '__all__' && State.selectedDevices.has('__all__'))
-      || (v !== '__all__' && (State.selectedDevices.has('__all__') || State.selectedDevices.has(v)));
-    p.classList.toggle('active', active);
-  });
-  renderAll();
-}
