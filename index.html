@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LoRa Log Viewer</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="css/styles.css">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+</head>
+<body>
+
+<div id="loading"><div class="bar"></div></div>
+<div id="drop-overlay"><div class="msg">Drop log files to load</div></div>
+<input type="file" id="file-input" hidden multiple accept=".log,.txt">
+
+<!-- Packet inspect modal -->
+<div id="modal">
+  <div class="panel">
+    <h3>
+      <span>Packet Inspect</span>
+      <button class="close-btn" onclick="closeModal()">×</button>
+    </h3>
+    <div class="kv" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- Rename device modal -->
+<div id="rename-modal">
+  <div class="panel">
+    <h3>
+      <span>Rename device address</span>
+      <button class="close-btn" onclick="closeRenameModal()">×</button>
+    </h3>
+    <div class="rename-form">
+      <div class="rename-row">
+        <span class="rename-key">Address</span>
+        <span class="rename-addr" id="rename-addr">—</span>
+      </div>
+      <div class="rename-row stack">
+        <label class="rename-key" for="rename-input">Display name</label>
+        <input class="field-input rename-input" type="text" id="rename-input"
+               placeholder="e.g. Unit A" maxlength="40"
+               onkeydown="if(event.key==='Enter')saveRename();if(event.key==='Escape')closeRenameModal();">
+        <span class="rename-hint">Leave blank to remove a custom name.</span>
+      </div>
+    </div>
+    <div class="rename-actions">
+      <button class="btn" onclick="closeRenameModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveRename()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Files management modal -->
+<div id="files-modal">
+  <div class="panel">
+    <h3>
+      <span>Manage files</span>
+      <button class="close-btn" onclick="closeFilesModal()">×</button>
+    </h3>
+    <div class="files-modal-toolbar">
+      <label class="files-modal-selectall">
+        <input type="checkbox" id="files-modal-selectall" checked>
+        <span>Show all</span>
+      </label>
+      <span style="flex:1"></span>
+      <span class="files-modal-summary" id="files-modal-summary">—</span>
+    </div>
+    <div class="files-modal-hint">Uncheck to hide a file's packets from the analysis. Files stay loaded.</div>
+    <div class="files-modal-list" id="files-modal-list"></div>
+    <div class="files-modal-actions">
+      <button class="btn" onclick="document.getElementById('file-input').click()">+ Add files</button>
+      <span style="flex:1"></span>
+      <button class="btn-danger" onclick="purgeAll()">Purge all</button>
+      <button class="btn-primary" onclick="closeFilesModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="app">
+
+  <!-- ═══ TOP BAR ═══════════════════════════════════════════════════ -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <span>LoRa Log Viewer</span>
+    </div>
+
+    <div class="topbar-spacer"></div>
+
+    <div class="topbar-status" id="status-pill">
+      <span class="dot"></span>
+      <span id="status-text">No data</span>
+    </div>
+
+    <div class="topbar-divider"></div>
+
+    <span style="font-family:var(--mono);font-size:11.5px;color:var(--text-3)" id="clock">—</span>
+  </header>
+
+  <!-- ═══ SIDEBAR ═══════════════════════════════════════════════════ -->
+  <aside class="sidebar">
+
+    <!-- ── Files ── -->
+    <div class="sb-section">
+      <div class="sb-label">
+        <span>Files</span>
+        <span class="count" id="files-count">0</span>
+      </div>
+
+      <button class="btn-add" onclick="document.getElementById('file-input').click()">
+        <span class="plus">+</span>
+        <span>Browse log files</span>
+      </button>
+      <div class="add-hint">or drag &amp; drop anywhere on the page</div>
+
+      <button class="btn btn-block manage-btn" id="manage-files-btn" onclick="openFilesModal()" hidden>
+        <span>Manage files</span>
+        <span class="manage-count" id="manage-count">0</span>
+      </button>
+    </div>
+
+    <!-- ── Configuration ── -->
+    <div class="sb-section">
+      <div class="sb-label"><span>Configuration</span></div>
+
+      <div class="field">
+        <label class="field-label" for="interval-input">
+          TX Interval <span class="field-hint">seconds</span>
+        </label>
+        <input class="field-input" type="number" id="interval-input" value="11" min="1" max="3600" step="1" onchange="onIntervalChange()">
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="threshold-input">
+          PER Threshold <span class="field-hint">%</span>
+        </label>
+        <input class="field-input" type="number" id="threshold-input" value="10" min="0" max="100" step="0.5" onchange="onThresholdChange()">
+      </div>
+
+      <label class="switch-row">
+        <span class="lbl">Compare windows</span>
+        <input type="checkbox" id="compare-toggle" onchange="toggleCompareMode()">
+        <span class="switch"></span>
+      </label>
+    </div>
+
+    <!-- ── Dev Addresses ── -->
+    <div class="sb-section" id="sb-channels" hidden>
+      <div class="sb-label">
+        <span>Dev Addresses</span>
+        <span class="count" id="channels-count">0</span>
+      </div>
+      <div class="channels-stack" id="device-pills"></div>
+    </div>
+
+    <!-- ── Export ── -->
+    <div class="sb-section" id="sb-export" hidden>
+      <div class="sb-label"><span>Export</span></div>
+      <button class="btn btn-block" onclick="exportSummaryCSV()">Download summary CSV</button>
+      <button class="btn btn-block" onclick="exportRawCSV()">Download raw messages CSV</button>
+    </div>
+
+  </aside>
+
+  <!-- ═══ MAIN ══════════════════════════════════════════════════════ -->
+  <main class="main">
+
+    <!-- Tab bar -->
+    <nav class="tab-bar" role="tablist" id="tab-bar">
+      <button class="tab active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
+      <button class="tab" data-tab="rssi" onclick="switchTab('rssi')">RSSI</button>
+      <button class="tab" data-tab="snr"  onclick="switchTab('snr')">SNR</button>
+      <button class="tab" data-tab="per"  onclick="switchTab('per')">PER</button>
+      <button class="tab" data-tab="hist" onclick="switchTab('hist')">Distribution</button>
+      <button class="tab" data-tab="freq" onclick="switchTab('freq')">Frequency</button>
+      <button class="tab" data-tab="gaps" onclick="switchTab('gaps')">Losses</button>
+      <button class="tab" data-tab="compare" onclick="switchTab('compare')" id="tab-compare" hidden>Compare</button>
+    </nav>
+
+    <!-- Empty state (when no data) -->
+    <div class="empty-main" id="empty-main">
+      <div class="empty-card">
+        <div class="icon"></div>
+        <div class="title">No data loaded</div>
+        <div class="desc">
+          Drop one or more LoRa drive-by <code style="font-family:var(--mono);font-size:0.92em;background:var(--surface-2);padding:1px 5px;border-radius:3px">.log</code>
+          files in the sidebar, or click below to browse.
+          Files are parsed locally — nothing leaves your browser.
+        </div>
+        <button class="btn-primary" onclick="document.getElementById('file-input').click()">Load files</button>
+      </div>
+    </div>
+
+    <!-- ── Overview tab ── -->
+    <div class="tab-panel active" data-panel="overview" id="panel-overview" hidden>
+      <div class="page-head">
+        <div>
+          <div class="page-title">Overview</div>
+          <div class="page-subtitle" id="overview-subtitle">—</div>
+        </div>
+      </div>
+
+      <div class="figures-grid reveal" id="figures">
+        <div class="fig-card">
+          <div class="lbl">Messages</div>
+          <div class="num" id="fig-msgs">—</div>
+          <div class="sub" id="fig-msgs-sub"></div>
+          <div class="spark" id="fig-msgs-spark"></div>
+        </div>
+        <div class="fig-card">
+          <div class="lbl">Dev Addresses</div>
+          <div class="num" id="fig-devs">—</div>
+          <div class="sub" id="fig-devs-sub"></div>
+          <div class="spark" id="fig-devs-spark"></div>
+        </div>
+        <div class="fig-card warn">
+          <div class="lbl">Missed</div>
+          <div class="num" id="fig-missed">—</div>
+          <div class="sub" id="fig-missed-sub"></div>
+          <div class="spark" id="fig-missed-spark"></div>
+        </div>
+        <div class="fig-card error">
+          <div class="lbl">Overall PER</div>
+          <div class="num" id="fig-per">—</div>
+          <div class="sub" id="fig-per-sub"></div>
+          <div class="spark" id="fig-per-spark"></div>
+        </div>
+        <div class="fig-card accent">
+          <div class="lbl">Avg RSSI</div>
+          <div class="num" id="fig-rssi">—</div>
+          <div class="sub" id="fig-rssi-sub"></div>
+          <div class="spark" id="fig-rssi-spark"></div>
+        </div>
+        <div class="fig-card success">
+          <div class="lbl">Avg SNR</div>
+          <div class="num" id="fig-snr">—</div>
+          <div class="sub" id="fig-snr-sub"></div>
+          <div class="spark" id="fig-snr-spark"></div>
+        </div>
+      </div>
+
+      <div class="card reveal">
+        <div class="card-head">
+          <div class="title">Channel roster</div>
+          <div class="meta">click row to focus charts</div>
+        </div>
+        <div class="roster">
+          <table id="roster-table">
+            <thead><tr id="roster-thead"></tr></thead>
+            <tbody id="roster-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Chart tabs ── -->
+    <div class="tab-panel" data-panel="rssi">
+      <div class="chart-card">
+        <div class="chart-card-head">
+          <div class="title">RSSI · Signal strength over time</div>
+          <div class="head-tools">
+            <span class="meta">click point to inspect</span>
+            <div class="y-range" data-chart="rssi">
+              <span class="y-range-lbl">Y</span>
+              <input type="number" placeholder="min" id="y-min-rssi" oninput="onYLimitChange('rssi','min',this.value)">
+              <input type="number" placeholder="max" id="y-max-rssi" oninput="onYLimitChange('rssi','max',this.value)">
+              <button onclick="resetYLimit('rssi')" title="Reset axis">↺</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-canvas-wrap"><canvas id="rssi-chart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="tab-panel" data-panel="snr">
+      <div class="chart-card">
+        <div class="chart-card-head">
+          <div class="title">SNR · Signal-to-noise over time</div>
+          <div class="head-tools">
+            <span class="meta">click point to inspect</span>
+            <div class="y-range" data-chart="snr">
+              <span class="y-range-lbl">Y</span>
+              <input type="number" placeholder="min" id="y-min-snr" oninput="onYLimitChange('snr','min',this.value)">
+              <input type="number" placeholder="max" id="y-max-snr" oninput="onYLimitChange('snr','max',this.value)">
+              <button onclick="resetYLimit('snr')" title="Reset axis">↺</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-canvas-wrap"><canvas id="snr-chart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="tab-panel" data-panel="per">
+      <div class="chart-card">
+        <div class="chart-card-head">
+          <div class="title">PER · Rolling packet error rate</div>
+          <div class="head-tools">
+            <span class="meta" id="per-meta">—</span>
+            <div class="y-range" data-chart="per">
+              <span class="y-range-lbl">Y</span>
+              <input type="number" placeholder="min" id="y-min-per" oninput="onYLimitChange('per','min',this.value)">
+              <input type="number" placeholder="max" id="y-max-per" oninput="onYLimitChange('per','max',this.value)">
+              <button onclick="resetYLimit('per')" title="Reset axis">↺</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-canvas-wrap"><canvas id="per-chart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="tab-panel" data-panel="hist">
+      <div class="chart-card">
+        <div class="chart-card-head">
+          <div class="title">RSSI Distribution</div>
+          <div class="head-tools">
+            <span class="meta" id="hist-meta">histogram</span>
+            <div class="y-range" data-chart="hist">
+              <span class="y-range-lbl">Y</span>
+              <input type="number" placeholder="min" id="y-min-hist" oninput="onYLimitChange('hist','min',this.value)">
+              <input type="number" placeholder="max" id="y-max-hist" oninput="onYLimitChange('hist','max',this.value)">
+              <button onclick="resetYLimit('hist')" title="Reset axis">↺</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-canvas-wrap"><canvas id="rssi-hist-chart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="tab-panel" data-panel="freq">
+      <div class="chart-card">
+        <div class="chart-card-head">
+          <div class="title">Frequency Use</div>
+          <div class="head-tools">
+            <span class="meta">packets per LoRa channel</span>
+            <div class="y-range" data-chart="freq">
+              <span class="y-range-lbl">Y</span>
+              <input type="number" placeholder="min" id="y-min-freq" oninput="onYLimitChange('freq','min',this.value)">
+              <input type="number" placeholder="max" id="y-max-freq" oninput="onYLimitChange('freq','max',this.value)">
+              <button onclick="resetYLimit('freq')" title="Reset axis">↺</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-canvas-wrap"><canvas id="freq-chart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="tab-panel" data-panel="gaps">
+      <div class="chart-card">
+        <div class="chart-card-head">
+          <div class="title">Loss Events</div>
+          <div class="head-tools">
+            <span class="meta">FCnt gaps · click to inspect</span>
+            <div class="y-range" data-chart="gaps">
+              <span class="y-range-lbl">Y</span>
+              <input type="number" placeholder="min" id="y-min-gaps" oninput="onYLimitChange('gaps','min',this.value)">
+              <input type="number" placeholder="max" id="y-max-gaps" oninput="onYLimitChange('gaps','max',this.value)">
+              <button onclick="resetYLimit('gaps')" title="Reset axis">↺</button>
+            </div>
+          </div>
+        </div>
+        <div class="chart-canvas-wrap"><canvas id="gap-chart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- ── Compare tab ── -->
+    <div class="tab-panel" data-panel="compare">
+      <div class="page-head">
+        <div>
+          <div class="page-title">Compare time windows</div>
+          <div class="page-subtitle">Select two ranges to see side-by-side delta</div>
+        </div>
+      </div>
+
+      <div class="compare-windows">
+        <div class="compare-win A">
+          <h4>Window A</h4>
+          <div class="range">
+            <div class="field">
+              <label class="field-label" for="cmpA-start">Start</label>
+              <input class="field-input" type="datetime-local" id="cmpA-start">
+            </div>
+            <div class="field">
+              <label class="field-label" for="cmpA-end">End</label>
+              <input class="field-input" type="datetime-local" id="cmpA-end">
+            </div>
+          </div>
+        </div>
+        <div class="compare-win B">
+          <h4>Window B</h4>
+          <div class="range">
+            <div class="field">
+              <label class="field-label" for="cmpB-start">Start</label>
+              <input class="field-input" type="datetime-local" id="cmpB-start">
+            </div>
+            <div class="field">
+              <label class="field-label" for="cmpB-end">End</label>
+              <input class="field-input" type="datetime-local" id="cmpB-end">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="compare-actions">
+        <button class="btn-primary" onclick="runCompare()">Compare</button>
+        <button class="btn" onclick="autoSplitCompare()">Auto-split (halves)</button>
+      </div>
+
+      <div id="compare-results">
+        <div class="card">
+          <div class="card-head">
+            <div class="title">Comparison</div>
+          </div>
+          <div class="roster">
+            <table id="compare-table"></table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+</div>
+
+<script src="js/state.js"></script>
+<script src="js/sparkline.js"></script>
+<script src="js/parser.js"></script>
+<script src="js/stats.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/devices.js"></script>
+<script src="js/table.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/tabs.js"></script>
+<script src="js/modal.js"></script>
+<script src="js/files.js"></script>
+<script src="js/compare.js"></script>
+<script src="js/export.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

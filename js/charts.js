@@ -1,0 +1,406 @@
+/* Per-tab chart renderers. Light professional theme,
+   restrained axes, hairline grids.
+
+   Performance:
+   - parsing: false  (Chart.js skips per-point parsing)
+   - decimation plugin (LTTB) — keeps shape, drops ~90% of hit-tests
+   - interaction.mode: 'index' (much cheaper than 'nearest')
+
+   Click resolution still works because Chart.js exposes the original
+   data point at chart.data.datasets[i].data[index] (with _record). */
+
+function destroyCharts() {
+  Object.values(State.charts).forEach(c => c.destroy());
+  State.charts = {};
+}
+
+function cssV(n) { return getComputedStyle(document.body).getPropertyValue(n).trim(); }
+
+function applyChartDefaults() {
+  Chart.defaults.color = cssV('--text-3') || '#71717a';
+  Chart.defaults.borderColor = cssV('--border') || '#e7e5e0';
+  Chart.defaults.font.family = "'Onest', system-ui, sans-serif";
+  Chart.defaults.font.size = 11;
+  Chart.defaults.font.weight = 500;
+}
+
+function axisOpts() {
+  return {
+    grid:   { color: cssV('--border'), lineWidth: 1, drawTicks: false },
+    ticks:  { color: cssV('--text-3'), padding: 10,
+              font: { family: "'JetBrains Mono', monospace", size: 10.5 } },
+    border: { color: cssV('--border'), display: true },
+  };
+}
+
+function commonLegend() {
+  return {
+    display: true,
+    align: 'end',
+    labels: {
+      color: cssV('--text-2'),
+      boxWidth: 16, boxHeight: 1.5,
+      padding: 14,
+      font: { size: 11, family: "'Onest', sans-serif", weight: 500 },
+    },
+  };
+}
+
+function commonTooltip(extra = {}) {
+  return {
+    backgroundColor: cssV('--surface'),
+    borderColor: cssV('--border-2'),
+    borderWidth: 1,
+    titleColor: cssV('--text'),
+    titleFont: { size: 11, weight: 600, family: "'Onest', sans-serif" },
+    bodyColor: cssV('--text-2'),
+    bodyFont: { size: 11.5, family: "'JetBrains Mono', monospace" },
+    padding: 10,
+    cornerRadius: 4,
+    displayColors: true,
+    boxWidth: 8, boxHeight: 8,
+    animation: false,
+    ...extra,
+  };
+}
+
+function decimationPlugin() {
+  return { enabled: true, algorithm: 'lttb', samples: 500, threshold: 800 };
+}
+
+/* Apply per-chart Y-axis overrides from State.yLimits */
+function applyYLimits(yScale, chartName) {
+  const lim = State.yLimits && State.yLimits[chartName];
+  if (!lim) return yScale;
+  const out = { ...yScale };
+  if (lim.min != null) out.min = lim.min;
+  if (lim.max != null) out.max = lim.max;
+  return out;
+}
+
+function timelineScales(yLabel, chartName) {
+  const ax = axisOpts();
+  return {
+    x: { ...ax, type: 'time',
+         time: { tooltipFormat: 'yyyy-MM-dd HH:mm:ss',
+                 displayFormats: { minute: 'HH:mm', hour: 'HH:mm' } },
+         ticks: { ...ax.ticks, maxTicksLimit: 9, padding: 8 } },
+    y: applyYLimits({ ...ax,
+         grace: '10%',
+         title: { display: true, text: yLabel, color: cssV('--text-3'),
+                  font: { size: 10.5, family: "'Onest', sans-serif", weight: 500 } } },
+         chartName),
+  };
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   01 · RSSI TIMELINE
+   ════════════════════════════════════════════════════════════════════ */
+function renderRSSI(data) {
+  applyChartDefaults();
+  const devs = Object.entries(data);
+  State.charts.rssi = new Chart(document.getElementById('rssi-chart'), {
+    type: 'line',
+    data: {
+      datasets: devs.map(([dev, d], i) => ({
+        label: devLabel(dev),
+        data: d.messages.map(m => ({ x: m.ts * 1000, y: m.rssi, _record: m })),
+        borderColor: devColor(i),
+        backgroundColor: devColor(i, 0.06),
+        borderWidth: 1.4, pointRadius: 0,
+        pointHoverRadius: 5, pointHoverBackgroundColor: devColor(i),
+        pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2,
+        pointHitRadius: 8, tension: 0.12,
+        parsing: false,
+      }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      onClick: (ev, els, ch) => onChartClick(ch, els),
+      events: ['mousemove', 'mouseout', 'click', 'touchstart'],
+      interaction: { mode: 'index', intersect: false, axis: 'x' },
+      hover: { mode: 'index', intersect: false, axis: 'x' },
+      plugins: {
+        decimation: decimationPlugin(),
+        legend: commonLegend(),
+        tooltip: { enabled: false },
+      },
+      scales: timelineScales('RSSI · dBm', 'rssi'),
+    }
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   02 · SNR TIMELINE
+   ════════════════════════════════════════════════════════════════════ */
+function renderSNR(data) {
+  applyChartDefaults();
+  const devs = Object.entries(data);
+  State.charts.snr = new Chart(document.getElementById('snr-chart'), {
+    type: 'line',
+    data: {
+      datasets: devs.map(([dev, d], i) => ({
+        label: devLabel(dev),
+        data: d.messages.map(m => ({ x: m.ts * 1000, y: m.snr, _record: m })),
+        borderColor: devColor(i),
+        backgroundColor: devColor(i, 0.06),
+        borderWidth: 1.4, pointRadius: 0,
+        pointHoverRadius: 5, pointHoverBackgroundColor: devColor(i),
+        pointHoverBorderColor: '#fff', pointHoverBorderWidth: 2,
+        pointHitRadius: 8, tension: 0.12,
+        parsing: false,
+      }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      onClick: (ev, els, ch) => onChartClick(ch, els),
+      events: ['mousemove', 'mouseout', 'click', 'touchstart'],
+      interaction: { mode: 'index', intersect: false, axis: 'x' },
+      hover: { mode: 'index', intersect: false, axis: 'x' },
+      plugins: {
+        decimation: decimationPlugin(),
+        legend: commonLegend(),
+        tooltip: { enabled: false },
+      },
+      scales: timelineScales('SNR · dB', 'snr'),
+    }
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   03 · ROLLING PER + threshold line
+   ════════════════════════════════════════════════════════════════════ */
+function renderPER(data) {
+  applyChartDefaults();
+  const devs = Object.entries(data);
+  const win = perWindowSize();
+  const meta = document.getElementById('per-meta');
+  if (meta) meta.textContent = `window ${win} msgs · threshold ${State.threshold}%`;
+
+  const datasets = devs.map(([dev, d], i) => ({
+    label: devLabel(dev),
+    data: rollingPER(d.messages, win),
+    borderColor: devColor(i),
+    backgroundColor: devColor(i, 0.08),
+    borderWidth: 1.5, pointRadius: 0, tension: 0.3,
+    fill: devs.length === 1,
+    parsing: false,
+    segment: {
+      borderColor: ctx => ctx.p1.parsed.y > State.threshold
+        ? cssV('--error') : devColor(i),
+    }
+  }));
+
+  const allTs = devs.flatMap(([, d]) => d.messages.map(m => m.ts * 1000));
+  if (allTs.length) {
+    const minT = Math.min(...allTs), maxT = Math.max(...allTs);
+    datasets.push({
+      label: `Threshold ${State.threshold}%`,
+      data: [{ x: minT, y: State.threshold }, { x: maxT, y: State.threshold }],
+      borderColor: cssV('--error'),
+      borderDash: [5, 4],
+      borderWidth: 1.2,
+      pointRadius: 0, fill: false, tension: 0,
+      parsing: false,
+    });
+  }
+
+  const ax = axisOpts();
+  State.charts.per = new Chart(document.getElementById('per-chart'), {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      events: ['mousemove', 'mouseout', 'click', 'touchstart'],
+      interaction: { mode: 'index', intersect: false, axis: 'x' },
+      hover: { mode: 'index', intersect: false, axis: 'x' },
+      plugins: {
+        decimation: decimationPlugin(),
+        legend: commonLegend(),
+        tooltip: { enabled: false },
+      },
+      scales: {
+        x: { ...ax, type: 'time',
+             time: { tooltipFormat: 'yyyy-MM-dd HH:mm:ss',
+                     displayFormats: { minute: 'HH:mm', hour: 'HH:mm' } },
+             ticks: { ...ax.ticks, maxTicksLimit: 10, padding: 8 } },
+        y: applyYLimits({ ...ax, min: 0, grace: '10%',
+             title: { display: true, text: 'PER · %', color: cssV('--text-3'),
+                      font: { size: 10.5, family: "'Onest', sans-serif", weight: 500 } },
+             ticks: { ...ax.ticks, callback: v => v + '%', padding: 10 } }, 'per')
+      }
+    }
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   04 · RSSI HISTOGRAM — global category bins so bars are full-width
+   ════════════════════════════════════════════════════════════════════ */
+function renderHist(data) {
+  applyChartDefaults();
+  const devs = Object.entries(data);
+  const ax = axisOpts();
+
+  // Collect all RSSI values across selected devices
+  const allVals = devs.flatMap(([, d]) =>
+    d.messages.map(m => m.rssi).filter(v => v != null));
+
+  if (!allVals.length) {
+    State.charts.hist = new Chart(document.getElementById('rssi-hist-chart'), {
+      type: 'bar', data: { labels: [], datasets: [] },
+      options: { responsive: true, maintainAspectRatio: false }
+    });
+    return;
+  }
+
+  const min = Math.floor(Math.min(...allVals));
+  const max = Math.ceil(Math.max(...allVals));
+  const range = Math.max(1, max - min);
+
+  // RSSI is almost always integer dBm. Target ~24 bins; bin width is at least 1.
+  const allInt = allVals.every(v => Number.isInteger(v));
+  let binW = allInt ? Math.max(1, Math.ceil(range / 24)) : range / 24;
+  const binCount = Math.max(1, Math.ceil(range / binW) + 1);
+
+  const labels = [];
+  for (let i = 0; i < binCount; i++) {
+    const c = min + i * binW;
+    labels.push(binW >= 1 ? c.toFixed(0) : c.toFixed(1));
+  }
+
+  const meta = document.getElementById('hist-meta');
+  if (meta) meta.textContent = `${binCount} bins · ${min} to ${max} dBm`;
+
+  const datasets = devs.map(([dev, d], i) => {
+    const vals = d.messages.map(m => m.rssi).filter(v => v != null);
+    const counts = Array(binCount).fill(0);
+    vals.forEach(v => {
+      const idx = Math.min(Math.max(0, Math.floor((v - min) / binW)), binCount - 1);
+      counts[idx]++;
+    });
+    return {
+      label: devLabel(dev),
+      data: counts,
+      backgroundColor: devColor(i, 0.6),
+      borderColor: devColor(i),
+      borderWidth: 1, borderRadius: 3,
+      barPercentage: 0.95, categoryPercentage: 0.85,
+    };
+  });
+
+  State.charts.hist = new Chart(document.getElementById('rssi-hist-chart'), {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: commonLegend(), tooltip: commonTooltip() },
+      scales: {
+        x: { ...ax,
+             title: { display: true, text: 'RSSI · dBm', color: cssV('--text-3'),
+                      font: { size: 10.5, family: "'Onest', sans-serif", weight: 500 } },
+             ticks: { ...ax.ticks, autoSkip: true, maxRotation: 0 } },
+        y: applyYLimits({ ...ax, beginAtZero: true, grace: '10%',
+             title: { display: true, text: 'count', color: cssV('--text-3'),
+                      font: { size: 10.5, family: "'Onest', sans-serif", weight: 500 } },
+             ticks: { ...ax.ticks, precision: 0, padding: 10 } }, 'hist')
+      }
+    }
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   05 · FREQUENCY USAGE
+   ════════════════════════════════════════════════════════════════════ */
+function renderFreq(data) {
+  applyChartDefaults();
+  const devs = Object.entries(data);
+  const ax = axisOpts();
+  const allF = [...new Set(devs.flatMap(([, d]) => d.freqs))].sort((a, b) => a - b);
+  State.charts.freq = new Chart(document.getElementById('freq-chart'), {
+    type: 'bar',
+    data: {
+      labels: allF.map(f => f + ' MHz'),
+      datasets: devs.map(([dev, d], i) => ({
+        label: devLabel(dev),
+        data: allF.map(f => d.messages.filter(m => m.freq === f).length),
+        backgroundColor: devColor(i, 0.65),
+        borderColor: devColor(i),
+        borderWidth: 1, borderRadius: 3,
+      }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: commonLegend(), tooltip: commonTooltip() },
+      scales: {
+        x: { ...ax, ticks: { ...ax.ticks, maxRotation: 45, minRotation: 45 } },
+        y: applyYLimits({ ...ax, grace: '10%',
+             title: { display: true, text: 'messages', color: cssV('--text-3'),
+                      font: { size: 10.5, family: "'Onest', sans-serif", weight: 500 } },
+             ticks: { ...ax.ticks, precision: 0, padding: 10 } }, 'freq')
+      }
+    }
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   06 · LOSS EVENTS
+   ════════════════════════════════════════════════════════════════════ */
+function renderGaps(data) {
+  applyChartDefaults();
+  const devs = Object.entries(data);
+  const ax = axisOpts();
+  State.charts.gaps = new Chart(document.getElementById('gap-chart'), {
+    type: 'scatter',
+    data: {
+      datasets: devs.map(([dev, d], i) => ({
+        label: devLabel(dev),
+        data: d.gaps.map(g => ({ x: g.ts * 1000, y: g.size, _record: g._record })),
+        backgroundColor: devColor(i, 0.5),
+        borderColor: devColor(i),
+        borderWidth: 1,
+        pointRadius: 5, pointHoverRadius: 8,
+      }))
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      onClick: (ev, els, ch) => onChartClick(ch, els),
+      plugins: {
+        legend: commonLegend(),
+        tooltip: commonTooltip({
+          callbacks: {
+            title: items => items[0]
+              ? new Date(items[0].parsed.x).toLocaleString(undefined, { hour12: false })
+              : '',
+            label: ctx => `  Lost ${ctx.parsed.y} message(s)`
+          }
+        })
+      },
+      scales: {
+        x: { ...ax, type: 'time',
+             time: { tooltipFormat: 'yyyy-MM-dd HH:mm:ss',
+                     displayFormats: { minute: 'HH:mm', hour: 'HH:mm' } },
+             ticks: { ...ax.ticks, maxTicksLimit: 10, padding: 8 } },
+        y: applyYLimits({ ...ax, beginAtZero: true, grace: '15%',
+             title: { display: true, text: 'gap size · msgs', color: cssV('--text-3'),
+                      font: { size: 10.5, family: "'Onest', sans-serif", weight: 500 } },
+             ticks: { ...ax.ticks, precision: 0, padding: 10 } }, 'gaps')
+      }
+    }
+  });
+}
+
+const CHART_RENDERERS = {
+  rssi: renderRSSI,
+  snr:  renderSNR,
+  per:  renderPER,
+  hist: renderHist,
+  freq: renderFreq,
+  gaps: renderGaps,
+};
+
+function onChartClick(chart, els) {
+  if (!els.length) return;
+  const e = els[0];
+  const point = chart.data.datasets[e.datasetIndex].data[e.index];
+  if (point && point._record) showModal(point._record);
+}
