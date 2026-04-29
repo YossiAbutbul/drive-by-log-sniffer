@@ -161,6 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('tab-compare').hidden = false;
     }
     syncYLimitInputs();
+    syncIntervalLock();
     onDataLoaded();
   }
 });

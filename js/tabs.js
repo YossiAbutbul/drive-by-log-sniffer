@@ -1,6 +1,15 @@
 /* Tab switching. Overview + Compare are static panels;
    chart tabs render only their canvas on activation. */
 
+function syncIntervalLock() {
+  const input = document.getElementById('interval-input');
+  if (!input) return;
+  const onPer = State.activeTab === 'per';
+  input.disabled = !onPer;
+  input.closest('.field').style.opacity = onPer ? '' : '0.4';
+  input.closest('.field').title = onPer ? '' : 'Only affects PER — switch to the PER tab to edit';
+}
+
 function switchTab(name) {
   if (State.activeTab === name) return;
   State.activeTab = name;
@@ -15,6 +24,7 @@ function switchTab(name) {
   });
   document.getElementById('empty-main').style.display = hasData ? 'none' : 'flex';
 
+  syncIntervalLock();
   renderActiveChart();
   saveState();
 }
