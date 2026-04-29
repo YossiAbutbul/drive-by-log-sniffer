@@ -23,7 +23,7 @@ function attachDblClick(chart, kind) {
   canvas.addEventListener('dblclick', ev => {
     const c = canvas._chartRef;
     if (!c || !c.canvas) return;
-    const els = c.getElementsAtEventForMode(ev, 'nearest', { intersect: true }, true);
+    const els = c.getElementsAtEventForMode(ev, 'nearest', { intersect: false }, true);
     if (!els.length) return;
     const e = els[0];
     const ds = c.data.datasets[e.datasetIndex];
@@ -151,7 +151,7 @@ function renderRSSI(data) {
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
       events: ['mousemove', 'mouseout', 'click', 'touchstart'],
-      interaction: { mode: 'index', intersect: false, axis: 'x' },
+      interaction: { mode: 'nearest', intersect: false },
       plugins: {
         rafThrottle: rafThrottlePlugin,
         decimation: decimationPlugin(),
@@ -188,7 +188,7 @@ function renderSNR(data) {
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
       events: ['mousemove', 'mouseout', 'click', 'touchstart'],
-      interaction: { mode: 'index', intersect: false, axis: 'x' },
+      interaction: { mode: 'nearest', intersect: false },
       plugins: {
         rafThrottle: rafThrottlePlugin,
         decimation: decimationPlugin(),
@@ -253,7 +253,7 @@ function renderPER(data) {
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
       events: ['mousemove', 'mouseout', 'click', 'touchstart'],
-      interaction: { mode: 'index', intersect: false, axis: 'x' },
+      interaction: { mode: 'nearest', intersect: false },
       plugins: {
         rafThrottle: rafThrottlePlugin,
         decimation: decimationPlugin(),
@@ -342,7 +342,7 @@ function renderHist(data) {
     data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
-      interaction: { mode: 'index', intersect: false },
+      interaction: { mode: 'nearest', intersect: false },
       plugins: { legend: commonLegend(), tooltip: commonTooltip() },
       scales: {
         x: { ...ax,
@@ -382,7 +382,7 @@ function renderFreq(data) {
     },
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
-      interaction: { mode: 'index', intersect: false },
+      interaction: { mode: 'nearest', intersect: false },
       plugins: { legend: commonLegend(), tooltip: commonTooltip() },
       scales: {
         x: { ...ax, ticks: { ...ax.ticks, maxRotation: 45, minRotation: 45 } },
