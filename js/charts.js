@@ -16,13 +16,17 @@ function destroyCharts() {
 
 function attachDblClick(chart, kind) {
   const canvas = chart.canvas;
-  if (!canvas || canvas._dblBound) return;
+  if (!canvas) return;
+  canvas._chartRef = chart; // update on every (re)render
+  if (canvas._dblBound) return;
   canvas._dblBound = true;
   canvas.addEventListener('dblclick', ev => {
-    const els = chart.getElementsAtEventForMode(ev, 'nearest', { intersect: true }, true);
+    const c = canvas._chartRef;
+    if (!c || !c.canvas) return;
+    const els = c.getElementsAtEventForMode(ev, 'nearest', { intersect: true }, true);
     if (!els.length) return;
     const e = els[0];
-    const ds = chart.data.datasets[e.datasetIndex];
+    const ds = c.data.datasets[e.datasetIndex];
     const point = ds.data[e.index];
     if (!point) return;
     if (kind === 'per' && point._window) {
